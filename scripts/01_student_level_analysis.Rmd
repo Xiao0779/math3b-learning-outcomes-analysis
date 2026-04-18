@@ -1,0 +1,276 @@
+---
+title: "Math 3B: AI Tutor Usage and Student Learning Outcomes"
+author: "Xiao Long"
+date: "2026-01-30"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(broom)
+```
+
+## Overview
+
+This notebook analyzes student-level learning outcomes from a live AI-powered math tutoring platform (Vocareum) used in a UC-affiliated Math 3B (Calculus) course during Fall 2025. Each row corresponds to one student.
+
+**Research questions:**
+
+1. Does AI tutor usage predict learning gains?
+2. Does practice volume predict learning gains?
+3. What is the probability that a student improves at all, and what drives it?
+
+---
+
+## Data Overview
+
+```{r}
+df_raw <- read_excel("../data/FA25 Math 3B Data - Full Quarter.xlsx", sheet = 1)
+df_raw %>% glimpse()
+```
+
+---
+
+## Data Cleaning
+
+Raw data from the platform contains Excel error tokens (`#VALUE!`, `#N/A`, etc.) that must be handled before analysis.
+
+```{r}
+to_num <- function(x) {
+  x <- as.character(x)
+  x <- str_trim(x)
+  x[x %in% c("#VALUE!", "#N/A", "#DIV/0!", "#ERROR!", "", "NA")] <- NA
+  suppressWarnings(as.numeric(x))
+}
+
+df <- df_raw %>%
+  mutate(
+    pretest        = to_num(`Pretest Grade`),
+    mid1           = to_num(`Midterm I Grade`),
+    mid2           = to_num(`Midterm II Grade`),
+    final_exam     = to_num(`Final Exam Grade`),
+    tutor_requests = to_num(`#of tutor requests`),
+    n_correct      = to_num(`# of questions correct`),
+    n_incorrect    = to_num(`# of questions incorrect`),
+    total_seen     = to_num(`Total Questions Seen`),
+    accuracy       = to_num(`Accuracy`)
+  ) %>%
+  mutate(
+    delta    = final_exam - pretest,
+    attempts = n_correct + n_incorrect,
+    error_rate = ifelse(attempts > 0, n_incorrect / attempts, NA_real_)
+  )
+```
+
+---
+
+## Learning Gain Distribution
+
+```{r}
+df_valid <- df %>%
+  filter(!is.na(delta), !is.na(tutor_requests), !is.na(pretest))
+
+nrow(df_valid)
+```
+
+```{r}
+ggplot(df_valid, aes(x = delta)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.8, color = "white") +
+  geom_vline(xintercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    title = "Distribution of Learning Gains (Final − Pretest)",
+    x = "Learning Gain",
+    y = "Number of Students"
+  ) +
+  theme_minimal()
+```
+
+Most students show positive learning gains over the quarter. A subset show zero or negative gain, motivating binary outcome analysis later.
+
+---
+
+## Quantile-Based Student Grouping
+
+To avoid arbitrary cutoffs, students are grouped into Low / Middle / High categories using quartiles of tutor usage and practice volume.
+
+```{r}
+df_a <- df_valid %>%
+  mutate(
+    tutor_q = ntile(tutor_requests, 4),
+    tutor_group = case_when(
+      tutor_q == 1 ~ "Low (Q1)",
+      tutor_q == 4 ~ "High (Q4)",
+      TRUE         ~ "Middle (Q2–Q3)"
+    ),
+    tutor_group = factor(tutor_group, levels = c("Low (Q1)", "Middle (Q2–Q3)", "High (Q4)"))
+  )
+
+df_b <- df %>%
+  filter(!is.na(total_seen), !is.na(pretest), !is.na(delta)) %>%
+  mutate(
+    seen_q = ntile(total_seen, 4),
+    effort_group = case_when(
+      seen_q == 1 ~ "Low (Q1)",
+      seen_q == 4 ~ "High (Q4)",
+      TRUE        ~ "Middle (Q2–Q3)"
+    ),
+    effort_group = factor(effort_group, levels = c("Low (Q1)", "Middle (Q2–Q3)", "High (Q4)"))
+  )
+```
+
+```{r}
+ggplot(df_a, aes(x = tutor_group, y = delta, fill = tutor_group)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Learning Gain by AI Tutor Usage Level",
+    x = "Tutor Usage Group",
+    y = "Learning Gain (Final − Pretest)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Students with higher AI tutor usage tend to show higher median learning gains, though overlap across groups is substantial.
+
+```{r}
+ggplot(df_b, aes(x = effort_group, y = delta, fill = effort_group)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "Learning Gain by Practice Volume",
+    x = "Practice Volume Group (Total Questions Seen)",
+    y = "Learning Gain (Final − Pretest)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Students who practiced more (higher total questions seen) show notably larger learning gains compared to lower-practice groups.
+
+---
+
+## Linear Regression: Predicting Magnitude of Learning Gains
+
+### Model A — AI Tutor Usage
+
+```{r}
+model_a <- lm(delta ~ tutor_requests + pretest, data = df_a)
+summary(model_a)
+```
+
+Tutor requests have a small but statistically significant positive association with learning gain (p < 0.05). Pretest score is strongly negative — students who start higher have less room to improve (ceiling effect). Adjusted R² ≈ 0.18.
+
+### Model B — Practice Volume
+
+```{r}
+model_b <- lm(delta ~ total_seen + pretest, data = df_b)
+summary(model_b)
+```
+
+Practice volume (total questions seen) has a large and highly significant positive effect (p < 0.001). This model explains substantially more variance than Model A (Adjusted R² ≈ 0.37), suggesting overall practice intensity matters more than AI tutor usage alone.
+
+### Visualization
+
+```{r}
+ggplot(df_a, aes(x = tutor_requests, y = delta)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = TRUE, color = "steelblue") +
+  labs(
+    title = "Learning Gain vs AI Tutor Usage",
+    x = "Number of Tutor Requests",
+    y = "Learning Gain (Final − Pretest)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+ggplot(df_b, aes(x = total_seen, y = delta)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = TRUE, color = "darkred") +
+  labs(
+    title = "Learning Gain vs Practice Volume",
+    x = "Total Questions Seen",
+    y = "Learning Gain (Final − Pretest)"
+  ) +
+  theme_minimal()
+```
+
+---
+
+## Logistic Regression: Probability of Improvement
+
+Beyond the magnitude of gains, we model whether students improve at all (binary outcome).
+
+```{r}
+df_logit <- df_valid %>%
+  mutate(improved = ifelse(delta > 0, 1, 0))
+
+table(df_logit$improved)
+```
+
+```{r}
+logit_model <- glm(
+  improved ~ accuracy + tutor_requests + pretest,
+  data   = df_logit,
+  family = binomial
+)
+summary(logit_model)
+```
+
+Pretest grade is a strong and significant negative predictor of improvement probability — students who start higher are less likely to show any measured gain (ceiling effect). Tutor accuracy and request frequency show positive associations but do not consistently reach significance, suggesting baseline performance dominates.
+
+```{r}
+ggplot(df_logit, aes(x = tutor_requests, y = improved)) +
+  geom_jitter(height = 0.05, alpha = 0.3) +
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), color = "steelblue") +
+  labs(
+    title = "Tutor Usage and Probability of Learning Improvement",
+    x = "Number of Tutor Requests",
+    y = "Probability of Improvement"
+  ) +
+  theme_minimal()
+```
+
+---
+
+## Binary Outcome: Tutor Usage by Improvement Group
+
+```{r}
+df_logit <- df_logit %>%
+  mutate(
+    improved_label = factor(improved, levels = c(0, 1),
+                            labels = c("No Improvement", "Improved"))
+  )
+
+ggplot(df_logit, aes(x = improved_label, y = tutor_requests, fill = improved_label)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(
+    title = "AI Tutor Usage by Learning Outcome",
+    x = "",
+    y = "Number of Tutor Requests"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Students who improved tend to have a higher median number of tutor requests. However, high tutor usage among non-improving students likely reflects difficulty rather than effective learning — students may turn to the tutor more when struggling.
+
+---
+
+## Conclusion
+
+1. **AI tutor usage is positively associated with learning gains**, but the effect is modest (R² ≈ 0.18 controlling for pretest).
+2. **Practice volume is a stronger predictor** — total questions seen explains substantially more variance (R² ≈ 0.37), suggesting that the AI tutor is most effective as a tool that supports sustained practice rather than a standalone driver of improvement.
+3. **Pretest performance dominates both models** — a consistent ceiling effect where higher-starting students show smaller measured gains.
+4. **Logistic regression confirms**: tutor usage and accuracy have positive but often non-significant effects on the probability of improvement once baseline is controlled. Initial ability is the primary driver.
+5. **Increased tutor usage among non-improving students likely signals difficulty**, not engagement — an important nuance for platform design decisions.

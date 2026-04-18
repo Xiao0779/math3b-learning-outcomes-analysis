@@ -1,0 +1,208 @@
+---
+title: "Math 3B: Question-Level Analysis with Mixed-Effects Models"
+author: "Xiao Long"
+date: "2026-03-11"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readxl)
+library(lme4)
+library(broom.mixed)
+```
+
+## Overview
+
+This notebook extends the student-level analysis by working at the **question level** — each row represents a single student attempt on a single question. This finer granularity reveals patterns in how time-on-task, attempt behavior, and topic area jointly predict question performance, while accounting for the nested structure of the data (questions nested within students).
+
+**Research questions:**
+
+1. Which topics (zones) are most difficult for students?
+2. Does time spent on a question predict performance?
+3. After accounting for individual student differences, what question-level factors drive scores?
+
+---
+
+## Data Overview
+
+```{r}
+df_raw <- read_excel("../data/FA25 Math 3B Data Mar9.xlsx", sheet = 2)
+df_raw %>% glimpse()
+```
+
+```{r}
+dim(df_raw)
+```
+
+Each row is one student–question interaction. Key variables: `ID` (student), `Question`, `Zone title` (topic area), `Duration seconds` (time spent), `Question % score`, `Number attempts`.
+
+---
+
+## Exploratory Analysis
+
+### Score and Time Distribution
+
+```{r}
+ggplot(df_raw, aes(x = `Question % score`)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.8, color = "white") +
+  labs(
+    title = "Distribution of Question Scores",
+    x = "Question Score (%)",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+df_raw %>%
+  filter(`Duration seconds` < 600) %>%
+  ggplot(aes(x = `Duration seconds`, y = `Question % score`)) +
+  geom_point(alpha = 0.15) +
+  geom_smooth(method = "lm", color = "steelblue") +
+  labs(
+    title = "Time Spent vs Question Score (capped at 10 min)",
+    x = "Duration (seconds)",
+    y = "Question Score (%)"
+  ) +
+  theme_minimal()
+```
+
+A modest positive relationship exists between time spent and question score, with wide variability. Very short durations tend to correspond to both very high scores (quick correct answers) and very low scores (quick guesses or skips).
+
+---
+
+## Topic-Level Performance
+
+### Average Score by Topic Area
+
+```{r}
+zone_summary <- df_raw %>%
+  group_by(`Zone title`) %>%
+  summarise(
+    avg_score   = mean(`Question % score`, na.rm = TRUE),
+    avg_time    = mean(`Duration seconds`, na.rm = TRUE),
+    avg_attempts = mean(`Number attempts`, na.rm = TRUE),
+    n           = n()
+  ) %>%
+  arrange(avg_score)
+
+zone_summary
+```
+
+```{r}
+ggplot(zone_summary, aes(x = reorder(`Zone title`, avg_score), y = avg_score)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  coord_flip() +
+  labs(
+    title = "Average Score by Topic Area",
+    x = "Topic",
+    y = "Average Score (%)"
+  ) +
+  theme_minimal()
+```
+
+Clear differences in difficulty across topic areas. This motivates including `Zone title` as a predictor in the regression models.
+
+### Hardest Individual Questions
+
+```{r}
+question_summary <- df_raw %>%
+  group_by(Question) %>%
+  summarise(
+    avg_score    = mean(`Question % score`, na.rm = TRUE),
+    avg_time     = mean(`Duration seconds`, na.rm = TRUE),
+    avg_attempts = mean(`Number attempts`, na.rm = TRUE),
+    n            = n()
+  ) %>%
+  arrange(avg_score)
+
+top10_hard <- question_summary %>% slice(1:10)
+
+ggplot(top10_hard, aes(x = reorder(Question, avg_score), y = avg_score)) +
+  geom_col(fill = "tomato", alpha = 0.85) +
+  coord_flip() +
+  labs(
+    title = "Top 10 Most Difficult Questions",
+    x = "Question",
+    y = "Average Score (%)"
+  ) +
+  theme_minimal()
+```
+
+---
+
+## OLS Regression (Baseline)
+
+Before fitting the mixed-effects model, we establish an OLS baseline to assess the raw predictive power of time, attempts, and topic.
+
+```{r}
+df_clean <- df_raw %>%
+  filter(`Duration seconds` < 600)
+
+model_ols <- lm(
+  `Question % score` ~ `Duration seconds` + `Number attempts` + `Zone title`,
+  data = df_clean
+)
+summary(model_ols)
+```
+
+OLS treats all observations as independent, ignoring the clustering of questions within students. This inflates degrees of freedom and underestimates standard errors.
+
+---
+
+## Mixed-Effects Model
+
+To properly account for the nested data structure — multiple question attempts per student — we fit a linear mixed-effects model with a random intercept for each student. This separates within-student effects (how question features affect a given student's score) from between-student differences in baseline performance.
+
+```{r}
+model_mixed <- lmer(
+  `Question % score` ~ `Duration seconds` + `Number attempts` + `Zone title` + (1 | ID),
+  data = df_clean
+)
+summary(model_mixed)
+```
+
+The random intercept for `ID` captures stable individual differences in student performance. Fixed effects then estimate the within-student associations between time, attempt behavior, topic area, and question score.
+
+---
+
+## Random Effects: Student Heterogeneity
+
+```{r}
+student_re <- ranef(model_mixed)$ID %>%
+  rownames_to_column(var = "ID") %>%
+  rename(random_intercept = `(Intercept)`)
+
+ggplot(student_re, aes(x = random_intercept)) +
+  geom_histogram(bins = 30, fill = "steelblue", alpha = 0.8, color = "white") +
+  labs(
+    title = "Distribution of Student Random Effects",
+    subtitle = "Each bar represents a student's deviation from the average baseline score",
+    x = "Student Random Intercept",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+The distribution of random intercepts is approximately normal and centered near zero, confirming that some students consistently outperform or underperform the average, independent of question-level features. This validates the use of mixed-effects modeling over standard OLS.
+
+---
+
+## Conclusion
+
+1. **Topic area is the strongest question-level predictor** of score. Some topics are consistently harder across all students, with clear ranking in average performance.
+2. **Time spent shows a positive association with score**, but with diminishing returns — very long durations do not guarantee high performance and may reflect difficulty.
+3. **Student heterogeneity is substantial.** The random effects distribution shows that individual baseline differences account for meaningful variance in question scores, justifying the mixed-effects approach over OLS.
+4. **Mixed-effects modeling is necessary** for this nested data structure: treating 200+ student–question observations as independent would produce misleading standard errors and overconfident inference.
+5. **Practical implication:** Platform interventions targeting specific hard topics (identified by zone-level analysis) may be more effective than uniform tutor engagement strategies.

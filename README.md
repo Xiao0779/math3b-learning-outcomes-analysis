@@ -22,23 +22,32 @@ This project analyzes student learning outcomes from a live AI-powered math tuto
 
 ---
 
-## Methods
+## Notebooks
 
-| Method | Purpose |
-|--------|---------|
-| Data cleaning & validation | Handle Excel error tokens (`#N/A`, `#VALUE!`); verify pre-computed delta variable |
-| Linear regression (OLS) | Predict magnitude of learning gains (continuous outcome) |
-| Logistic regression | Model probability of any improvement (binary outcome) |
-| Visualization (ggplot2) | Distributions, scatter plots, boxplots, logistic curves |
+### `01_student_level_analysis.Rmd`
+Student-level analysis of learning gains (Final − Pretest) across the full quarter.
+- Data cleaning (handling Excel error tokens)
+- Quantile-based student grouping (Low / Middle / High tutor usage and practice volume)
+- **Linear regression:** AI tutor usage (R² ≈ 0.18) vs practice volume (R² ≈ 0.37) as predictors of learning gain
+- **Logistic regression:** modeling probability of any improvement
+- Binary outcome comparison: tutor usage by improvement group
+
+### `02_question_level_mixed_effects.Rmd`
+Question-level analysis using the full interaction log (one row per student–question attempt).
+- Topic-level difficulty ranking across all course zones
+- Identification of the 10 hardest individual questions
+- OLS baseline vs **linear mixed-effects model** (lme4) with random student intercepts
+- Random effects distribution: quantifying individual student heterogeneity
 
 ---
 
 ## Key Findings
 
-- **Tutor usage is positively associated with learning gains**, but the effect is modest (Adjusted R² ≈ 0.18 in OLS model).
-- **Pretest performance is the strongest predictor** — students who start with higher scores show smaller gains (ceiling effect), consistent with research on prior knowledge effects.
-- **Tutor accuracy and request frequency** have positive coefficients but do not always reach statistical significance once pretest is controlled — suggesting that student baseline matters more than tutor usage alone.
-- **Students who improved tend to use the tutor more** (higher median requests), but high usage among non-improving students likely reflects difficulty rather than effective engagement.
+- **Practice volume is a stronger predictor than tutor usage** — total questions seen explains ~37% of variance in learning gains vs ~18% for tutor requests alone.
+- **Pretest score is the dominant predictor** in all models — a consistent ceiling effect where higher-starting students show smaller measured gains.
+- **Topic area drives question difficulty** — significant performance differences across course zones, independent of student ability.
+- **Student heterogeneity is substantial** — mixed-effects random intercepts confirm that individual baseline differences account for meaningful score variance, making OLS inadequate for question-level data.
+- **High tutor usage among non-improving students likely signals difficulty**, not engagement — an actionable insight for platform intervention design.
 
 ---
 
@@ -46,7 +55,8 @@ This project analyzes student learning outcomes from a live AI-powered math tuto
 
 ```
 scripts/
-└── Math3B.Rmd        # Full analysis — data cleaning, regression, visualization, conclusions
+├── 01_student_level_analysis.Rmd       # OLS + logistic regression, student-level
+└── 02_question_level_mixed_effects.Rmd # lme4 mixed-effects, question-level
 
 output/               # Generated report outputs
 figures/              # Saved plots (if re-run)
@@ -56,9 +66,9 @@ figures/              # Saved plots (if re-run)
 
 ## Tools & Stack
 
-- **R** (tidyverse, dplyr, ggplot2, readxl)
-- **R Markdown** (PDF and HTML output)
-- **Statistical methods:** OLS regression, logistic regression, binary outcome classification
+- **R** (tidyverse, dplyr, ggplot2, readxl, lme4, broom.mixed)
+- **R Markdown** (HTML output with floating TOC)
+- **Statistical methods:** OLS regression, logistic regression, linear mixed-effects models (random intercepts)
 
 ---
 
