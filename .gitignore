@@ -1,0 +1,23 @@
+# Data files — not shared (student privacy / proprietary)
+data/
+*.xlsx
+*.xls
+*.csv
+
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user/
+Rplots.pdf
+
+# Intermediate Rmd outputs (replaced by final cleaned version)
+scripts/FA25-Math-3B.html
+scripts/Math-3B-Analysis.html
+scripts/Math3B-Analysis-1-30.html
+scripts/FA25 Math 3B Data Mar9.Rmd
+scripts/FA25 Math 3B.Rmd
+scripts/Math 3B Analysis.Rmd
+scripts/Math3B Analysis 1:30.Rmd
+
+# OS
+.DS_Store
