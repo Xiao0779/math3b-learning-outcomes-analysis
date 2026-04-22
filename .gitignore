@@ -25,3 +25,9 @@ scripts/Rplots.pdf
 
 # OS
 .DS_Store
+
+# Python artifacts
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/

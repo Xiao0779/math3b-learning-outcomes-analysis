@@ -39,14 +39,24 @@ Question-level analysis using the full interaction log (one row per student–qu
 - OLS baseline vs **linear mixed-effects model** (lme4) with random student intercepts
 - Random effects distribution: quantifying individual student heterogeneity
 
+### `03_ml_prediction.ipynb` *(Python)*
+ML-based prediction of learning improvement — extends the statistical analysis with supervised learning models.
+- Feature engineering from interaction logs (pretest, tutor requests, practice volume, accuracy)
+- Model comparison: **Linear Regression vs Random Forest vs Neural Network (MLP)**
+- Best model: **Random Forest (R² ≈ 0.45)**, outperforming both LR and MLP
+- Feature importance analysis confirming practice volume > tutor usage frequency
+- 5 publication-quality visualizations (distributions, correlation heatmap, model comparison, predicted vs actual, feature importance)
+
 ---
 
 ## Key Findings
 
-- **Practice volume is a stronger predictor than tutor usage** — total questions seen explains ~37% of variance in learning gains vs ~18% for tutor requests alone.
+- **Practice volume is a stronger predictor than tutor usage** — total questions seen explains ~37% of variance in learning gains (R analysis) and ranks as top engagement feature in ML models.
 - **Pretest score is the dominant predictor** in all models — a consistent ceiling effect where higher-starting students show smaller measured gains.
+- **Random Forest outperforms Linear Regression and MLP** (R² 0.453 vs 0.421 vs 0.376) — nonlinear interactions between features matter.
+- **Attempting questions matters more than accuracy** — activity volume is more predictive than correctness rate, supporting iterative learning theory.
 - **Topic area drives question difficulty** — significant performance differences across course zones, independent of student ability.
-- **Student heterogeneity is substantial** — mixed-effects random intercepts confirm that individual baseline differences account for meaningful score variance, making OLS inadequate for question-level data.
+- **Student heterogeneity is substantial** — mixed-effects random intercepts confirm individual baseline differences account for meaningful score variance.
 - **High tutor usage among non-improving students likely signals difficulty**, not engagement — an actionable insight for platform intervention design.
 
 ---
@@ -55,20 +65,21 @@ Question-level analysis using the full interaction log (one row per student–qu
 
 ```
 scripts/
-├── 01_student_level_analysis.Rmd       # OLS + logistic regression, student-level
-└── 02_question_level_mixed_effects.Rmd # lme4 mixed-effects, question-level
+├── 01_student_level_analysis.Rmd       # R: OLS + logistic regression, student-level
+├── 02_question_level_mixed_effects.Rmd # R: lme4 mixed-effects, question-level
+└── 03_ml_prediction.ipynb              # Python: LR vs Random Forest vs MLP
 
-output/               # Generated report outputs
-figures/              # Saved plots (if re-run)
+figures/              # ML notebook output plots
+output/               # R Markdown HTML reports
 ```
 
 ---
 
 ## Tools & Stack
 
-- **R** (tidyverse, dplyr, ggplot2, readxl, lme4, broom.mixed)
-- **R Markdown** (HTML output with floating TOC)
-- **Statistical methods:** OLS regression, logistic regression, linear mixed-effects models (random intercepts)
+**R:** tidyverse, dplyr, ggplot2, readxl, lme4, broom.mixed, R Markdown  
+**Python:** pandas, numpy, scikit-learn, matplotlib, seaborn, Jupyter  
+**Statistical methods:** OLS regression, logistic regression, linear mixed-effects models, Random Forest, MLP
 
 ---
 
