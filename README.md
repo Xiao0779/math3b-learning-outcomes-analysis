@@ -14,6 +14,14 @@ This project analyzes student learning outcomes from a live AI-powered math tuto
 
 ---
 
+## Poster
+
+**"Practice Over Prompts: What Predicts Learning Gains in an AI Math Tutor?"** — presented at the UCSD Computational Social Science Capstone Poster Session, Jacobs School of Engineering (June 2026).
+
+[View the poster (PDF)](poster/capstone_poster.pdf)
+
+---
+
 ## Research Questions
 
 1. Does AI tutor usage frequency predict learning gains?
